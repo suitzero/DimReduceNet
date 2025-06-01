@@ -1,0 +1,17 @@
+# Core scientific libraries
+numpy
+scipy
+matplotlib
+
+# Symbolic Regression (Phase 1)
+gplearn
+
+# Deep Learning (Future Phases - uncomment as needed)
+# tensorflow
+# torch
+# torchvision
+# torchaudio
+
+# Jupyter environment (for notebooks)
+# notebook
+# jupyterlab
