@@ -13,5 +13,5 @@ gplearn
 # torchaudio
 
 # Jupyter environment (for notebooks)
-# notebook
-# jupyterlab
+notebook
+jupyterlab
