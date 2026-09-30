@@ -1,0 +1,116 @@
+import numpy as np
+import random
+import textwrap
+
+class SyntheticDataFactory:
+    def __init__(self, resolution=64):
+        self.resolution = resolution
+
+    def _exec_code(self, code_str):
+        context = {}
+        try:
+            exec(code_str, context)
+        except Exception as e:
+            print(f"Error executing generated code:\n{code_str}")
+            raise e
+        return np.array(context['img'], dtype=np.float32)
+
+    def generate_2d_primitive(self):
+        shape_type = random.choice(["circle", "square"])
+        cx = random.uniform(-0.5, 0.5)
+        cy = random.uniform(-0.5, 0.5)
+        params = {"shape": shape_type, "cx": cx, "cy": cy}
+
+        code_template = textwrap.dedent(f"""
+            import numpy as np
+            def render(res={self.resolution}):
+                y, x = np.ogrid[:res, :res]
+                x = (x - res / 2) / (res / 2) * 1.5
+                y = (y - res / 2) / (res / 2) * 1.5
+                {{logic}}
+                return mask.astype(float)
+            img = render()
+        """)
+
+        if shape_type == "circle":
+            r = random.uniform(0.3, 0.8)
+            params["r"] = r
+            logic = f"mask = (x - ({cx:.2f}))**2 + (y - ({cy:.2f}))**2 < {r:.2f}**2"
+        elif shape_type == "square":
+            size = random.uniform(0.3, 0.8)
+            params["size"] = size
+            logic = f"mask = np.maximum(np.abs(x - ({cx:.2f})), np.abs(y - ({cy:.2f}))) < {size:.2f}"
+
+        code = code_template.replace("{logic}", logic)
+        img = self._exec_code(code)
+        return params, code, img
+
+    def generate_math_function(self):
+        func_type = random.choice(["parabola", "sine"])
+        params = {"func": func_type}
+
+        code_template = textwrap.dedent(f"""
+            import numpy as np
+            def render(res={self.resolution}):
+                y, x = np.ogrid[:res, :res]
+                x = (x - res / 2) / (res / 4)
+                y = (y - res / 2) / (res / 4)
+                {{logic}}
+                thickness = 0.1
+                mask = np.abs(y - val) < thickness
+                return mask.astype(float)
+            img = render()
+        """)
+
+        if func_type == "parabola":
+            a = random.uniform(0.5, 2.0)
+            params["a"] = a
+            logic = f"val = {a:.2f} * x**2"
+        elif func_type == "sine":
+            freq = random.uniform(1.0, 3.0)
+            params["freq"] = freq
+            logic = f"val = np.sin({freq:.2f} * x)"
+
+        code = code_template.replace("{logic}", logic)
+        img = self._exec_code(code)
+        return params, code, img
+
+    def generate_3d_primitive(self):
+        shape_type = random.choice(["sphere", "cube"])
+        params = {"shape": shape_type}
+
+        code_template = textwrap.dedent(f"""
+            import numpy as np
+            def render(res={self.resolution}):
+                y, x = np.ogrid[:res, :res]
+                uv_x = (x - res / 2) / (res / 2)
+                uv_y = (y - res / 2) / (res / 2)
+                uv_x, uv_y = np.broadcast_arrays(uv_x, uv_y)
+                ro = np.array([0.0, 0.0, -3.0])
+                rd = np.stack((uv_x, uv_y, np.ones_like(uv_x)), axis=-1)
+                norm = np.linalg.norm(rd, axis=-1, keepdims=True)
+                rd = rd / norm
+                t = np.zeros((res, res))
+                hits = np.zeros((res, res), dtype=bool)
+                for i in range(30):
+                    p = ro + rd * t[..., np.newaxis]
+                    {{sdf_logic}}
+                    t += d
+                    hits |= (d < 0.01)
+                final = hits.astype(float) * (1.0 - (t - 2.0) / 3.0)
+                return np.clip(final, 0, 1)
+            img = render()
+        """)
+
+        if shape_type == "sphere":
+            r = random.uniform(0.8, 1.2)
+            params["r"] = r
+            sdf_logic = f"d = np.linalg.norm(p, axis=-1) - {r:.2f}"
+        elif shape_type == "cube":
+            s = random.uniform(0.6, 0.9)
+            params["s"] = s
+            sdf_logic = f"q = np.abs(p) - {s:.2f}\n        d = np.linalg.norm(np.maximum(q, 0.0), axis=-1) + np.minimum(np.maximum(q[...,0], np.maximum(q[...,1], q[...,2])), 0.0)"
+
+        code = code_template.replace("{sdf_logic}", sdf_logic)
+        img = self._exec_code(code)
+        return params, code, img
