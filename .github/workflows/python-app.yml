@@ -22,4 +22,4 @@ jobs:
         pip install pytest
     - name: Test Roadmap Phases with pytest
       run: |
-        pytest -v tests/test_roadmap.py
+        pytest -v tests/
