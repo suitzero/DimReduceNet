@@ -114,3 +114,14 @@ class SyntheticDataFactory:
         code = code_template.replace("{sdf_logic}", sdf_logic)
         img = self._exec_code(code)
         return params, code, img
+
+    def sample_time_series(self, fn, xs, ts, seed=None):
+        if seed is not None:
+            np.random.seed(seed)
+        
+        X, T = np.meshgrid(xs, ts, indexing='ij')
+        X_flat = X.flatten()
+        T_flat = T.flatten()
+        
+        Y_flat = fn(X_flat, T_flat)
+        return X_flat, T_flat, Y_flat

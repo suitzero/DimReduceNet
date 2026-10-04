@@ -28,14 +28,16 @@ class BinOp(Node):
     right: Node
     def __str__(self): return f"({self.left} {self.op} {self.right})"
 
-def generate_trees_by_size(size, num_consts=1):
+def generate_trees_by_size(size, num_consts=1, use_t=False):
     """Generates all abstract expression trees of a given size (number of nodes)."""
     if size == 1:
         yield Var('x')
+        if use_t:
+            yield Var('t')
         yield Const(0)
     elif size > 1:
         # Unary operations
-        for child in generate_trees_by_size(size - 1, num_consts):
+        for child in generate_trees_by_size(size - 1, num_consts, use_t=use_t):
             for op in ['sin', 'cos', 'exp', 'abs', 'sqrt']:
                 yield UnaryOp(op, child)
         
@@ -44,8 +46,8 @@ def generate_trees_by_size(size, num_consts=1):
             right_size = size - 1 - left_size
             if right_size < 1:
                 continue
-            for left in generate_trees_by_size(left_size, num_consts):
-                for right in generate_trees_by_size(right_size, num_consts):
+            for left in generate_trees_by_size(left_size, num_consts, use_t=use_t):
+                for right in generate_trees_by_size(right_size, num_consts, use_t=use_t):
                     for op in ['+', '-', '*', '/']:
                         # Simple pruning for commutativity and redundancy
                         if op in ['+', '*'] and str(left) > str(right):
@@ -79,6 +81,8 @@ def compile_tree(node: Node):
     
     def build_expr(n: Node) -> str:
         if isinstance(n, Var):
+            if n.name == 't':
+                return "t"
             return "x"
         elif isinstance(n, Const):
             return f"c[{n.idx}]"
@@ -95,6 +99,8 @@ def compile_tree(node: Node):
     
     def build_format(n: Node) -> str:
         if isinstance(n, Var):
+            if n.name == 't':
+                return "t"
             return "x"
         elif isinstance(n, Const):
             return "{}"
@@ -105,7 +111,7 @@ def compile_tree(node: Node):
             
     format_str = build_format(node)
     
-    func_code = f"def f(x, c):\n    return {expr_str}"
+    func_code = f"def f(x, t, c):\n    return {expr_str}"
     local_vars = {'np': np}
     exec(func_code, local_vars)
     
@@ -128,21 +134,25 @@ def format_eq(format_str: str, constants: list) -> str:
     return s
 
 class SymbolicRegressionEngine:
-    def __init__(self, max_size=8, threshold=1e-3, seed=42):
+    def __init__(self, max_size=8, threshold=1e-3, seed=42, use_t=False):
         self.max_size = max_size
         self.threshold = threshold
         self.seed = seed
+        self.use_t = use_t
         
-    def fit(self, x_data, y_data):
+    def fit(self, x_data, y_data, t_data=None):
         """
         Fits the shortest possible mathematical function to the data.
         Returns the formatted function string and the MSE.
         """
+        if t_data is None:
+            t_data = np.zeros_like(x_data)
+
         best_str = None
         best_mse = float('inf')
         
         for size in range(1, self.max_size + 1):
-            for tree in generate_trees_by_size(size):
+            for tree in generate_trees_by_size(size, use_t=self.use_t):
                 try:
                     f, num_c, format_str = compile_tree(tree)
                 except Exception:
@@ -150,7 +160,7 @@ class SymbolicRegressionEngine:
                     
                 if num_c == 0:
                     try:
-                        y_pred = f(x_data, [])
+                        y_pred = f(x_data, t_data, [])
                         if np.isscalar(y_pred):
                             y_pred = np.full_like(x_data, y_pred)
                         mse = np.mean((y_data - y_pred)**2)
@@ -171,7 +181,7 @@ class SymbolicRegressionEngine:
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore")
                         try:
-                            y_pred = f(x_data, c)
+                            y_pred = f(x_data, t_data, c)
                             if np.isscalar(y_pred):
                                 y_pred = np.full_like(x_data, y_pred)
                             if not np.all(np.isfinite(y_pred)):
