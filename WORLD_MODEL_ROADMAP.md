@@ -46,7 +46,7 @@
 *   **목표:** 시간의 흐름(동영상)을 수학적 함수로 압축 (Video $\leftrightarrow$ Math).
 *   **주요 작업:**
     *   함수 매개변수에 시간 축 `t`를 추가하여 동적 수식 탐색(Dynamic Symbolic Regression).
-    *   튕기는 공, 진동 운동 등 단순한 물리 현상이 담긴 비디오를 궤적 및 물리 방정식으로 역산.
+    *   [x] 튕기는 공, 진동 운동 등 단순한 물리 현상이 담긴 비디오를 궤적 및 물리 방정식으로 역산.
     *   도출된 규칙(함수)을 통해 미래의 프레임 예측(Future Frame Prediction).
 
 ### Phase 3: 복잡한 씬 구성 및 CSG (Constructive Solid Geometry)
