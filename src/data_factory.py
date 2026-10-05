@@ -125,3 +125,13 @@ class SyntheticDataFactory:
         
         Y_flat = fn(X_flat, T_flat)
         return X_flat, T_flat, Y_flat
+
+    def generate_bouncing_ball_trajectory(self, t_min=0.0, t_max=5.0, num_steps=50, A=1.5, f=1.0/(2*np.pi), phi=0.0):
+        ts = np.linspace(t_min, t_max, num_steps)
+        xs = np.zeros_like(ts)
+        
+        ys = A * np.abs(np.sin(2 * np.pi * f * ts + phi))
+        
+        params = {"A": A, "f": f, "phi": phi}
+        
+        return params, xs, ts, ys
