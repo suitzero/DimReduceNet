@@ -115,6 +115,62 @@ class SyntheticDataFactory:
         img = self._exec_code(code)
         return params, code, img
 
+    def generate_composite_csg_scene(self):
+        shape1 = random.choice(["sphere", "cube"])
+        shape2 = random.choice(["sphere", "cube"])
+        op = random.choice(["union", "intersection", "difference"])
+        
+        params = {"shape1": shape1, "shape2": shape2, "op": op}
+        
+        code_template = textwrap.dedent(f"""
+            import numpy as np
+            def render(res={self.resolution}):
+                y, x = np.ogrid[:res, :res]
+                uv_x = (x - res / 2) / (res / 2)
+                uv_y = (y - res / 2) / (res / 2)
+                uv_x, uv_y = np.broadcast_arrays(uv_x, uv_y)
+                ro = np.array([0.0, 0.0, -3.0])
+                rd = np.stack((uv_x, uv_y, np.ones_like(uv_x)), axis=-1)
+                norm = np.linalg.norm(rd, axis=-1, keepdims=True)
+                rd = rd / norm
+                t = np.zeros((res, res))
+                hits = np.zeros((res, res), dtype=bool)
+                for i in range(30):
+                    p = ro + rd * t[..., np.newaxis]
+                    {{sdf_logic}}
+                    t += d
+                    hits |= (d < 0.01)
+                final = hits.astype(float) * (1.0 - (t - 2.0) / 3.0)
+                return np.clip(final, 0, 1)
+            img = render()
+        """)
+        
+        def get_sdf_logic(shape_type, var_prefix, idx):
+            if shape_type == "sphere":
+                r = random.uniform(0.6, 1.0)
+                params[f"r{idx}"] = r
+                return f"{var_prefix} = np.linalg.norm(p, axis=-1) - {r:.2f}"
+            elif shape_type == "cube":
+                s = random.uniform(0.5, 0.8)
+                params[f"s{idx}"] = s
+                return f"q{idx} = np.abs(p) - {s:.2f}\n        {var_prefix} = np.linalg.norm(np.maximum(q{idx}, 0.0), axis=-1) + np.minimum(np.maximum(q{idx}[...,0], np.maximum(q{idx}[...,1], q{idx}[...,2])), 0.0)"
+
+        sdf1 = get_sdf_logic(shape1, "d1", 1)
+        sdf2 = get_sdf_logic(shape2, "d2", 2)
+        
+        if op == "union":
+            combine_logic = "d = np.minimum(d1, d2)"
+        elif op == "intersection":
+            combine_logic = "d = np.maximum(d1, d2)"
+        elif op == "difference":
+            combine_logic = "d = np.maximum(d1, -d2)"
+            
+        sdf_logic = f"{sdf1}\n        {sdf2}\n        {combine_logic}"
+        
+        code = code_template.replace("{sdf_logic}", sdf_logic)
+        img = self._exec_code(code)
+        return params, code, img
+
     def sample_time_series(self, fn, xs, ts, seed=None):
         if seed is not None:
             np.random.seed(seed)

@@ -48,9 +48,9 @@ def generate_trees_by_size(size, num_consts=1, use_t=False):
                 continue
             for left in generate_trees_by_size(left_size, num_consts, use_t=use_t):
                 for right in generate_trees_by_size(right_size, num_consts, use_t=use_t):
-                    for op in ['+', '-', '*', '/']:
+                    for op in ['+', '-', '*', '/', 'union', 'intersection', 'difference']:
                         # Simple pruning for commutativity and redundancy
-                        if op in ['+', '*'] and str(left) > str(right):
+                        if op in ['+', '*', 'union', 'intersection'] and str(left) > str(right):
                             continue
                         if isinstance(left, Const) and isinstance(right, Const):
                             continue
@@ -93,6 +93,12 @@ def compile_tree(node: Node):
         elif isinstance(n, BinOp):
             if n.op == '/':
                 return f"({build_expr(n.left)} / ({build_expr(n.right)} + 1e-8))"
+            elif n.op == 'union':
+                return f"np.minimum({build_expr(n.left)}, {build_expr(n.right)})"
+            elif n.op == 'intersection':
+                return f"np.maximum({build_expr(n.left)}, {build_expr(n.right)})"
+            elif n.op == 'difference':
+                return f"np.maximum({build_expr(n.left)}, -({build_expr(n.right)}))"
             return f"({build_expr(n.left)} {n.op} {build_expr(n.right)})"
     
     expr_str = build_expr(node)
@@ -107,6 +113,8 @@ def compile_tree(node: Node):
         elif isinstance(n, UnaryOp):
             return f"{n.op}({build_format(n.child)})"
         elif isinstance(n, BinOp):
+            if n.op in ['union', 'intersection', 'difference']:
+                return f"{n.op}({build_format(n.left)}, {build_format(n.right)})"
             return f"({build_format(n.left)} {n.op} {build_format(n.right)})"
             
     format_str = build_format(node)
