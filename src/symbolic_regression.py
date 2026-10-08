@@ -211,3 +211,63 @@ class SymbolicRegressionEngine:
                     return format_eq(format_str, res.x), res.fun
                     
         return best_str, best_mse
+
+    def fit_component(self, x_data, y_data, unexplained_mask, t_data=None, trunc_error=0.05):
+        if t_data is None:
+            t_data = np.zeros_like(x_data)
+
+        best_str = None
+        best_mse = float('inf')
+        
+        for size in range(1, self.max_size + 1):
+            for tree in generate_trees_by_size(size, use_t=self.use_t):
+                try:
+                    f_eval, num_c, format_str = compile_tree(tree)
+                except Exception:
+                    continue
+                    
+                if num_c == 0:
+                    try:
+                        y_pred = f_eval(x_data, t_data, [])
+                        if np.isscalar(y_pred):
+                            y_pred = np.full_like(x_data, y_pred)
+                        mse = np.mean(np.minimum((y_data[unexplained_mask] - y_pred[unexplained_mask])**2, trunc_error))
+                        
+                        if mse < best_mse:
+                            best_mse = mse
+                            best_str = format_str
+                            
+                        if mse < self.threshold:
+                            return best_str, mse
+                    except Exception:
+                        pass
+                    continue
+                
+                # Optimize constants
+                def objective(c):
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        try:
+                            y_pred = f_eval(x_data, t_data, c)
+                            if np.isscalar(y_pred):
+                                y_pred = np.full_like(x_data, y_pred)
+                            if not np.all(np.isfinite(y_pred)):
+                                return float('inf')
+                            return np.mean(np.minimum((y_data[unexplained_mask] - y_pred[unexplained_mask])**2, trunc_error))
+                        except Exception:
+                            return float('inf')
+                            
+                bounds = [(-10.0, 10.0)] * num_c
+                res = opt.differential_evolution(
+                    objective, bounds, seed=self.seed, popsize=10, maxiter=20, tol=self.threshold
+                )
+                
+                if res.fun < best_mse:
+                    best_mse = res.fun
+                    best_str = format_eq(format_str, res.x)
+                    
+                if res.fun < self.threshold:
+                    return format_eq(format_str, res.x), res.fun
+                    
+        return best_str, best_mse
