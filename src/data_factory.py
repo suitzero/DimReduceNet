@@ -171,6 +171,75 @@ class SyntheticDataFactory:
         img = self._exec_code(code)
         return params, code, img
 
+    
+    def generate_multi_object_scene(self, min_objects=2, max_objects=3):
+        num_objects = random.randint(min_objects, max_objects)
+        params = {"num_objects": num_objects}
+        
+        code_template = textwrap.dedent(f"""
+            import numpy as np
+            def render(res={self.resolution}):
+                y, x = np.ogrid[:res, :res]
+                uv_x = (x - res / 2) / (res / 2)
+                uv_y = (y - res / 2) / (res / 2)
+                uv_x, uv_y = np.broadcast_arrays(uv_x, uv_y)
+                ro = np.array([0.0, 0.0, -3.0])
+                rd = np.stack((uv_x, uv_y, np.ones_like(uv_x)), axis=-1)
+                norm = np.linalg.norm(rd, axis=-1, keepdims=True)
+                rd = rd / norm
+                t = np.zeros((res, res))
+                hits = np.zeros((res, res), dtype=bool)
+                for i in range(30):
+                    p = ro + rd * t[..., np.newaxis]
+                    {{sdf_logic}}
+                    t += d
+                    hits |= (d < 0.01)
+                final = hits.astype(float) * (1.0 - (t - 2.0) / 3.0)
+                return np.clip(final, 0, 1)
+            img = render()
+        """)
+        
+        def get_sdf_logic(idx):
+            shape_type = random.choice(["sphere", "cube", "cylinder"])
+            cx = random.uniform(-1.5, 1.5)
+            params[f"shape{idx}"] = shape_type
+            params[f"cx{idx}"] = cx
+            
+            p_shifted = f"p_shifted_{idx} = p - np.array([{cx:.2f}, 0.0, 0.0])"
+            
+            if shape_type == "sphere":
+                r = random.uniform(0.4, 0.8)
+                params[f"r{idx}"] = r
+                sdf = f"d{idx} = np.linalg.norm(p_shifted_{idx}, axis=-1) - {r:.2f}"
+            elif shape_type == "cube":
+                s = random.uniform(0.3, 0.6)
+                params[f"s{idx}"] = s
+                sdf = f"q{idx} = np.abs(p_shifted_{idx}) - {s:.2f}\n        d{idx} = np.linalg.norm(np.maximum(q{idx}, 0.0), axis=-1) + np.minimum(np.maximum(q{idx}[...,0], np.maximum(q{idx}[...,1], q{idx}[...,2])), 0.0)"
+            elif shape_type == "cylinder":
+                r = random.uniform(0.3, 0.5)
+                h = random.uniform(0.4, 0.8)
+                params[f"r{idx}"] = r
+                params[f"h{idx}"] = h
+                sdf = f"d{idx} = np.maximum(np.linalg.norm(p_shifted_{idx}[..., [0,2]], axis=-1) - {r:.2f}, np.abs(p_shifted_{idx}[..., 1]) - {h:.2f})"
+            return f"{p_shifted}\n        {sdf}"
+
+        sdfs = []
+        for i in range(num_objects):
+            sdfs.append(get_sdf_logic(i+1))
+            
+        sdf_logic = "\n        ".join(sdfs)
+        
+        if num_objects == 2:
+            combine_logic = "d = np.minimum(d1, d2)"
+        else:
+            combine_logic = "d = np.minimum(d1, np.minimum(d2, d3))"
+            
+        sdf_logic = f"{sdf_logic}\n        {combine_logic}"
+        
+        code = code_template.replace("{sdf_logic}", sdf_logic)
+        img = self._exec_code(code)
+        return params, code, img
+
     def sample_time_series(self, fn, xs, ts, seed=None):
         if seed is not None:
             np.random.seed(seed)
