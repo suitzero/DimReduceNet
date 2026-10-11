@@ -71,7 +71,7 @@ def verify(expr: str, emitted_python: str) -> bool:
     return True
 
 
-def emit_raymarch_glsl(sdf_expr: str) -> str:
+def emit_raymarch_glsl(sdf_expr: str, texture_scale: float = 1.0, color1: tuple[float, float, float] = (0.8, 0.8, 0.8), color2: tuple[float, float, float] = (0.3, 0.3, 0.3)) -> str:
     """
     Emits a GLSL snippet (Shadertoy-style mainImage-compatible function) for a given SDF expression.
     Uses sphere tracing to render the SDF.
@@ -161,9 +161,13 @@ def emit_raymarch_glsl(sdf_expr: str) -> str:
         
         vec3 n = normalize(vec3(d1 - d2, d3 - d4, d5 - d6));
         
+        // Checkerboard texture
+        float chk = mod(floor(p.x * {texture_scale}) + floor(p.y * {texture_scale}) + floor(p.z * {texture_scale}), 2.0);
+        vec3 albedo = mix(vec3({color1[0]}, {color1[1]}, {color1[2]}), vec3({color2[0]}, {color2[1]}, {color2[2]}), chk);
+        
         vec3 light_dir = normalize(vec3(1.0, 1.0, -1.0));
         float diff = max(dot(n, light_dir), 0.0);
-        col = vec3(0.8, 0.8, 0.8) * diff + vec3(0.1); // Lambert + ambient
+        col = albedo * diff + vec3(0.1); // Lambert + ambient
     }}
     
     // Output to screen
