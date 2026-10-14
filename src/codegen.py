@@ -71,7 +71,7 @@ def verify(expr: str, emitted_python: str) -> bool:
     return True
 
 
-def emit_raymarch_glsl(sdf_expr: str, texture_scale: float = 1.0, color1: tuple[float, float, float] = (0.8, 0.8, 0.8), color2: tuple[float, float, float] = (0.3, 0.3, 0.3)) -> str:
+def emit_raymarch_glsl(sdf_expr: str, texture_scale: float = 1.0, color1: tuple[float, float, float] = (0.8, 0.8, 0.8), color2: tuple[float, float, float] = (0.3, 0.3, 0.3), light_dir: tuple[float, float, float] = (1.0, 1.0, -1.0), shadow_softness: float = 16.0) -> str:
     """
     Emits a GLSL snippet (Shadertoy-style mainImage-compatible function) for a given SDF expression.
     Uses sphere tracing to render the SDF.
@@ -165,8 +165,29 @@ def emit_raymarch_glsl(sdf_expr: str, texture_scale: float = 1.0, color1: tuple[
         float chk = mod(floor(p.x * {texture_scale}) + floor(p.y * {texture_scale}) + floor(p.z * {texture_scale}), 2.0);
         vec3 albedo = mix(vec3({color1[0]}, {color1[1]}, {color1[2]}), vec3({color2[0]}, {color2[1]}, {color2[2]}), chk);
         
-        vec3 light_dir = normalize(vec3(1.0, 1.0, -1.0));
-        float diff = max(dot(n, light_dir), 0.0);
+        vec3 light_dir = normalize(vec3({light_dir[0]}, {light_dir[1]}, {light_dir[2]}));
+        
+        // Soft shadows
+        float shadow = 1.0;
+        float t_shad = 0.02;
+        float max_t_shad = 10.0;
+        for(int i = 0; i < 30; i++) {{
+            vec3 p_shad = p + light_dir * t_shad;
+            float x = p_shad.x;
+            float y = p_shad.y;
+            float z = p_shad.z;
+            float d_shad = {glsl_expr};
+            if(d_shad < 0.001) {{
+                shadow = 0.0;
+                break;
+            }}
+            shadow = min(shadow, {shadow_softness} * d_shad / t_shad);
+            t_shad += d_shad;
+            if(t_shad > max_t_shad) break;
+        }}
+        shadow = clamp(shadow, 0.0, 1.0);
+        
+        float diff = max(dot(n, light_dir), 0.0) * shadow;
         col = albedo * diff + vec3(0.1); // Lambert + ambient
     }}
     
